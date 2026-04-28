@@ -1,36 +1,47 @@
-import { useState,useRef, useEffect } from 'react'
+import { useState,useEffect } from 'react';
+import { Message } from '../../common';
 import './App.css'
-import axios from "axios"
-import { PMEvent } from './types'
-import EventList from './components/EventList'
-import { useDebounce } from './hooks/useDebounce'
+import MeesageForm from './components/MeesageForm';
+import { ws } from './main';
+import MessageList from './components/MessageList';
+import axios from 'axios';
 
 function App() {
 
-  const apiUrl : string = "/api/public-search"
-  const [events,setEvents] = useState<PMEvent[]>([])
-  
-  const [search, setSearch] = useState<string>('')
+  const userId = crypto.randomUUID();
 
-  const debouncedSearch = useDebounce(search, 200)
+  const [messages, setMessages] = useState([])
 
-  useEffect(()=>{
-    if(debouncedSearch.length>0)
-        {
-          searchMarkets(debouncedSearch)
-      }
-  },[debouncedSearch])
+  useEffect(() =>{
+    async function getMessages(){
+        const {data: messagesFromDb} = await axios.get("http://localhost:3000/messages")
+        console.log(messagesFromDb)
+        const mappedDatesMessages =  
+        messagesFromDb.map((messageObj: Message) => {
+          return {
+          ...messageObj,
+        createdAt: new Date(messageObj.createdAt)
+        }
+        }
+      )
+        setMessages(mappedDatesMessages)
+    }
+    getMessages()
+  },[])
 
-  async function searchMarkets(query:string): Promise<void> {
-      const results = await axios.get(`${apiUrl}?q=${query}`)
-      setEvents(results.data.events)
+  const sendMessageToServer = (message:Message) => {
+    ws.send(JSON.stringify(message))
   }
-
+  
+  ws.onmessage = (message => {
+    const messageObj = JSON.parse(message.data)
+    messageObj.createdAt = new Date(messageObj.createdAt)
+    setMessages([...messages, messageObj])
+  })
   return (
     <>
-        <input onChange={(event: React.ChangeEvent<HTMLInputElement>) => setSearch(event.target.value)}/>
-        {/* <MarketList/> */}
-        <EventList events={events}/>
+      <MessageList messages={messages} />
+      <MeesageForm onSend={sendMessageToServer} userId={userId}/>
     </>
   )
 }
